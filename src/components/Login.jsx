@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 
+const SIGNUP_URL = 'https://pay.kirvano.com/148ddb5b-aeb0-4628-aefc-7bd430499ad1'
+
 function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -13,7 +15,7 @@ function Login() {
     setError('')
     setLoading(true)
 
-    const result = login(email, password)
+    const result = await login(email, password)
 
     if (!result.success) {
       setError(result.error)
@@ -46,6 +48,7 @@ function Login() {
               placeholder="seu@email.com"
               required
               autoFocus
+              autoComplete="email"
             />
           </div>
 
@@ -57,6 +60,7 @@ function Login() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               required
+              autoComplete="current-password"
             />
           </div>
 
@@ -64,6 +68,18 @@ function Login() {
             {loading ? '> Entrando...' : '> Entrar'}
           </button>
         </form>
+
+        <div className="signup-link">
+          <span className="text-dim">Nao tem uma conta?</span>{' '}
+          <a
+            href={SIGNUP_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="signup-anchor"
+          >
+            Cadastre-se
+          </a>
+        </div>
 
         <div className="login-footer text-dim">
           Sistema de camuflagem de criativos
@@ -146,9 +162,24 @@ function Login() {
           font-size: var(--font-size-md);
           margin-top: var(--space-2);
         }
+        .signup-link {
+          text-align: center;
+          margin-top: var(--space-3);
+          font-size: var(--font-size-sm);
+        }
+        .signup-anchor {
+          color: var(--color-primary);
+          text-decoration: none;
+          font-weight: 600;
+          transition: opacity 0.2s;
+        }
+        .signup-anchor:hover {
+          opacity: 0.8;
+          text-decoration: underline;
+        }
         .login-footer {
           text-align: center;
-          margin-top: var(--space-4);
+          margin-top: var(--space-3);
           font-size: var(--font-size-xs);
           padding-top: var(--space-3);
           border-top: var(--border-width) solid var(--color-border);

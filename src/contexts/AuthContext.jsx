@@ -1,44 +1,73 @@
 import { createContext, useContext, useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 
 const AuthContext = createContext(null)
-
-// Usuarios locais (temporario - depois migra para Supabase)
-const LOCAL_USERS = [
-  { email: 'admin@hotghost.com', password: 'admin123' },
-  { email: 'user@hotghost.com', password: 'user123' },
-]
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Verifica se tem usuario salvo no localStorage
-    const savedUser = localStorage.getItem('hotghost_user')
-    if (savedUser) {
-      setUser(JSON.parse(savedUser))
+    // Verifica sessao atual
+    const getSession = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession()
+        if (error) throw error
+        setUser(session?.user ?? null)
+      } catch (error) {
+        console.error('Erro ao verificar sessao:', error.message)
+        setUser(null)
+      } finally {
+        setLoading(false)
+      }
     }
-    setLoading(false)
-  }, [])
 
-  const login = (email, password) => {
-    const foundUser = LOCAL_USERS.find(
-      u => u.email === email && u.password === password
+    getSession()
+
+    // Listener para mudancas de autenticacao
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setUser(session?.user ?? null)
+        setLoading(false)
+      }
     )
 
-    if (foundUser) {
-      const userData = { email: foundUser.email }
-      setUser(userData)
-      localStorage.setItem('hotghost_user', JSON.stringify(userData))
-      return { success: true }
+    return () => {
+      subscription.unsubscribe()
     }
+  }, [])
 
-    return { success: false, error: 'Email ou senha incorretos' }
+  const login = async (email, password) => {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password
+      })
+
+      if (error) {
+        if (error.message.includes('Invalid login credentials')) {
+          return { success: false, error: 'Email ou senha incorretos' }
+        }
+        if (error.message.includes('Email not confirmed')) {
+          return { success: false, error: 'Email nao confirmado. Verifique sua caixa de entrada.' }
+        }
+        return { success: false, error: error.message }
+      }
+
+      return { success: true, user: data.user }
+    } catch (error) {
+      return { success: false, error: 'Erro ao conectar. Tente novamente.' }
+    }
   }
 
-  const logout = () => {
-    setUser(null)
-    localStorage.removeItem('hotghost_user')
+  const logout = async () => {
+    try {
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
+      setUser(null)
+    } catch (error) {
+      console.error('Erro ao fazer logout:', error.message)
+    }
   }
 
   return (
