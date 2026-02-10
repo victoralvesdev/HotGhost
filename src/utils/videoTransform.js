@@ -532,15 +532,12 @@ export async function applyVideoClassico(videoFile, effects = {}, onProgress = (
     await ffmpeg.writeFile('ms.png', await loadMillisecondsImage())
     filesToCleanup.push('ms.png')
 
-    await ffmpeg.writeFile('trans.mp4', await loadTransparencyVideo())
-    filesToCleanup.push('trans.mp4')
-
     await ffmpeg.writeFile('relogio.mp4', await loadRelogioVideo())
     filesToCleanup.push('relogio.mp4')
 
     onProgress(0.1)
 
-    // PASSO 1: Criar video da imagem (0.1 segundo)
+    // PASSO 1: Criar video da imagem (0.1 segundo) sem audio (sera adicionado depois)
     console.log('[Classico] Passo 1: Criando intro da imagem...')
     let result = await ffmpeg.exec([
       '-loop', '1',
@@ -551,6 +548,7 @@ export async function applyVideoClassico(videoFile, effects = {}, onProgress = (
       '-vf', `scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT}`,
       '-r', '30',
       '-preset', 'ultrafast',
+      '-an',
       '-y', introVideo
     ])
     console.log('[Classico] Passo 1 resultado:', result)
@@ -560,6 +558,7 @@ export async function applyVideoClassico(videoFile, effects = {}, onProgress = (
     // PASSO 2: Processar video principal com efeitos
     console.log('[Classico] Passo 2: Processando video principal...')
 
+    // Monta filtro: escala + crop + fps + efeitos opcionais
     let vf = `scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},fps=30`
 
     // Adiciona efeitos se habilitado
@@ -570,8 +569,6 @@ export async function applyVideoClassico(videoFile, effects = {}, onProgress = (
       if (effects.left.noise > 0) vf += `,noise=alls=${effects.left.noise}:allf=t`
     }
 
-    // Primeiro processa o video sem transparencia
-    const mainTemp = `main_temp_${ts}.mp4`
     result = await ffmpeg.exec([
       '-i', inputVideo,
       '-vf', vf,
@@ -580,32 +577,17 @@ export async function applyVideoClassico(videoFile, effects = {}, onProgress = (
       '-crf', '28',
       '-pix_fmt', 'yuv420p',
       '-an',
-      '-y', mainTemp
-    ])
-    console.log('[Classico] Passo 2a (escala+efeitos) resultado:', result)
-    filesToCleanup.push(mainTemp)
-
-    // Agora aplica transparencia
-    result = await ffmpeg.exec([
-      '-i', mainTemp,
-      '-i', 'trans.mp4',
-      '-filter_complex', `[1:v]scale=${WIDTH}:${HEIGHT},format=rgba,colorchannelmixer=aa=0.06[trans];[0:v][trans]overlay=0:0:shortest=1[out]`,
-      '-map', '[out]',
-      '-c:v', 'libx264',
-      '-preset', 'ultrafast',
-      '-crf', '28',
-      '-pix_fmt', 'yuv420p',
-      '-an',
       '-y', mainVideo
     ])
-    console.log('[Classico] Passo 2b (transparencia) resultado:', result)
+    console.log('[Classico] Passo 2 resultado:', result)
     filesToCleanup.push(mainVideo)
-    onProgress(0.6)
+    onProgress(0.4)
 
-    // PASSO 3: Escalar video do relogio
+    // PASSO 3: Escalar video do relogio (sem audio, limitado a 1m30s)
     console.log('[Classico] Passo 3: Escalando relogio...')
     result = await ffmpeg.exec([
       '-i', 'relogio.mp4',
+      '-t', '90',
       '-vf', `scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=increase,crop=${WIDTH}:${HEIGHT},fps=30`,
       '-c:v', 'libx264',
       '-preset', 'ultrafast',
@@ -616,12 +598,12 @@ export async function applyVideoClassico(videoFile, effects = {}, onProgress = (
     ])
     console.log('[Classico] Passo 3 resultado:', result)
     filesToCleanup.push(relogioScaled)
-    onProgress(0.75)
+    onProgress(0.6)
 
-    // PASSO 4: Concatenar os 3 videos
+    // PASSO 4: Concatenar os 3 videos (apenas video, sem audio)
     console.log('[Classico] Passo 4: Concatenando videos...')
+    const concatVideo = `concat_${ts}.mp4`
 
-    // Criar lista de concat
     const concatList = `file '${introVideo}'
 file '${mainVideo}'
 file '${relogioScaled}'`
@@ -633,9 +615,50 @@ file '${relogioScaled}'`
       '-safe', '0',
       '-i', 'list.txt',
       '-c', 'copy',
-      '-y', outputFile
+      '-y', concatVideo
     ])
     console.log('[Classico] Passo 4 resultado:', result)
+    filesToCleanup.push(concatVideo)
+    onProgress(0.75)
+
+    // PASSO 5: Adicionar audio original
+    // Extrai audio do video original e adiciona ao video concatenado
+    console.log('[Classico] Passo 5: Adicionando audio...')
+
+    // Primeiro tenta extrair o audio
+    const audioFile = `audio_${ts}.aac`
+    result = await ffmpeg.exec([
+      '-i', inputVideo,
+      '-vn',
+      '-c:a', 'aac',
+      '-b:a', '192k',
+      '-y', audioFile
+    ])
+
+    if (result === 0) {
+      // Combina video + audio
+      filesToCleanup.push(audioFile)
+      result = await ffmpeg.exec([
+        '-i', concatVideo,
+        '-i', audioFile,
+        '-c:v', 'copy',
+        '-c:a', 'copy',
+        '-map', '0:v:0',
+        '-map', '1:a:0',
+        '-y', outputFile
+      ])
+
+      if (result !== 0) {
+        console.log('[Classico] Falha ao combinar, usando video sem audio...')
+        await ffmpeg.exec(['-i', concatVideo, '-c', 'copy', '-y', outputFile])
+      }
+    } else {
+      // Video sem audio, copia direto
+      console.log('[Classico] Video sem audio, copiando...')
+      await ffmpeg.exec(['-i', concatVideo, '-c', 'copy', '-y', outputFile])
+    }
+
+    console.log('[Classico] Passo 5 resultado:', result)
     filesToCleanup.push(outputFile)
     onProgress(0.9)
 

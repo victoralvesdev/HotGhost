@@ -22,9 +22,16 @@ npm run preview  # Preview do build de producao
 ```
 src/
   main.jsx              # Entry point React
-  App.jsx               # Navegacao por abas (texto/imagem/video)
+  App.jsx               # Navegacao por abas (texto/imagem/video) + guard de autenticacao
   index.css             # Estilos globais + CSS custom properties
+  lib/
+    supabase.js         # Cliente Supabase (autenticacao)
+  contexts/
+    AuthContext.jsx     # Context de autenticacao (login, logout, sessao)
   components/
+    Login.jsx           # Tela de login
+    Header.jsx          # Header com logo e botao de logout
+    TabNav.jsx          # Navegacao por abas
     TextCamo.jsx        # UI de transformacao de texto
     ImageCamo.jsx       # UI de aplicacao de templates em imagem
     VideoCamo.jsx       # UI de aplicacao de templates em video
@@ -33,6 +40,18 @@ src/
     imageTransform.js   # Processamento de imagem via Canvas
     videoTransform.js   # Processamento de video via FFmpeg.wasm
 ```
+
+## Autenticacao
+
+Autenticacao via Supabase Auth. O `AuthContext` provê:
+- `user`: objeto do usuario logado ou null
+- `login(email, password)`: retorna `{ success, error?, user? }`
+- `logout()`: encerra sessao
+- `loading`: true durante verificacao inicial de sessao
+
+Variaveis de ambiente (opcionais, tem fallback hardcoded):
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
 
 ## Detalhes Tecnicos
 

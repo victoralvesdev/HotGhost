@@ -56,16 +56,50 @@ function VideoCamo() {
   }, [])
 
   const handleFileSelect = (file, side) => {
-    if (!file || !file.type.startsWith('video/')) return
+    if (!file) return
+
+    // Aceita video/* ou arquivos com extensao de video comum
+    const videoExtensions = ['.mp4', '.webm', '.mov', '.avi', '.mkv', '.m4v']
+    const isVideo = file.type.startsWith('video/') ||
+      videoExtensions.some(ext => file.name.toLowerCase().endsWith(ext))
+
+    if (!isVideo) {
+      console.error('[VideoCamo] Arquivo não é um video:', file.type, file.name)
+      alert('Por favor, selecione um arquivo de vídeo válido.')
+      return
+    }
+
+    console.log('[VideoCamo] Carregando video:', {
+      name: file.name,
+      type: file.type,
+      size: `${(file.size / 1024 / 1024).toFixed(2)} MB`
+    })
 
     // Revoga URL anterior se existir
     if (videos[side]) {
       URL.revokeObjectURL(videos[side])
     }
 
-    setVideoFiles(prev => ({ ...prev, [side]: file }))
-    setVideos(prev => ({ ...prev, [side]: URL.createObjectURL(file) }))
-    setResult(null)
+    const videoUrl = URL.createObjectURL(file)
+
+    // Testa se o video pode ser carregado
+    const testVideo = document.createElement('video')
+    testVideo.onloadedmetadata = () => {
+      console.log('[VideoCamo] Video carregado com sucesso:', {
+        duration: `${testVideo.duration.toFixed(2)}s`,
+        width: testVideo.videoWidth,
+        height: testVideo.videoHeight
+      })
+      setVideoFiles(prev => ({ ...prev, [side]: file }))
+      setVideos(prev => ({ ...prev, [side]: videoUrl }))
+      setResult(null)
+    }
+    testVideo.onerror = (e) => {
+      console.error('[VideoCamo] Erro ao carregar video:', e)
+      URL.revokeObjectURL(videoUrl)
+      alert('Erro ao carregar o vídeo. O formato pode não ser suportado pelo navegador.')
+    }
+    testVideo.src = videoUrl
   }
 
   const handleDrop = (e, side) => {
